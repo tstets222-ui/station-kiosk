@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>互動車站地圖 - 專業雙色列表連動版</title>
+<style>
+  /* --- 新增：登入頁面樣式 --- */
+  #login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+    background-color: #1a1a1e;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+  }
+
+  .login-box {
+    background-color: #232329;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    text-align: center;
+    color: white;
+    border: 1px solid #3a3a42;
+    width: 300px;
+  }
+
+  .login-box h2 {
+    margin-top: 0;
+    color: #dfc5fe;
+  }
+
+  .login-box input {
+    padding: 12px;
+    margin: 20px 0;
+    width: 80%;
+    border: 1px solid #3a3a42;
+    border-radius: 6px;
+    background-color: #1c1c22;
+    color: white;
+    font-size: 16px;
+    text-align: center;
+  }
+
+  .login-box button {
+    padding: 12px 20px;
+    width: 100%;
+    background-color: #714299;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+
+  .login-box button:hover {
+    background-color: #a354a0;
+  }
+
+  #error-msg {
+    color: #ff4d4d;
+    margin-top: 15px;
+    font-size: 0.9em;
+    display: none;
+  }
+
+  /* --- 1. 全局與版面配置 (左地圖、右列表) --- */
+  body {
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    background-color: #1a1a1e;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+  }
+
+  /* 將原本 body 的 flex 屬性移至 main-content */
+  #main-content {
+    display: none; /* 預設隱藏，登入後改為 flex */
+    height: 100%;
+    width: 100%;
+  }
+
+  /* 左側地圖可視窗口 */
+  .map-viewport {
+    flex: 1; /* 自動填滿剩餘空間 */
+    height: 100vh;
+    overflow: hidden;
+    cursor: grab;
+    position: relative;
+    background-color: #f4f4f9;
+  }
+
+  .map-viewport:active {
+    cursor: grabbing;
+  }
+
+  /* 地圖容器 */
+  .map-container {
+    position: absolute;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  .base-map {
+    display: block;
+  }
+
+  /* --- 2. 右側商店列表側邊欄 --- */
+  .sidebar {
+    width: 320px;
+    height: 100vh;
+    background-color: #232329;
+    border-left: 1px solid #3a3a42;
+    display: flex;
+    flex-direction: column;
+    color: white;
+    z-index: 100;
+    box-shadow: -5px 0 15px rgba(0,0,0,0.3);
+  }
+
+  .sidebar-header {
+    padding: 20px;
+    background-color: #1c1c22;
+    border-bottom: 1px solid #3a3a42;
+  }
+
+  .sidebar-header h2 {
+    margin: 0;
+    font-size: 1.3em;
+    color: #dfc5fe;
+  }
+
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto; /* 允許垂直滾動查看 36 間商鋪 */
+    padding: 15px;
+  }
+
+  .sidebar-section-title {
+    font-size: 0.9em;
+    font-weight: bold;
+    color: #888;
+    margin: 15px 5px 8px 5px;
+    letter-spacing: 1px;
+    border-left: 3px solid #888;
+    padding-left: 8px;
+  }
+  
+  /* 側邊欄各路線專屬顏色條 */
+  .title-tst { border-color: #e60012; color: #ff4d4d; }
+  .title-ets { border-color: #714299; color: #b886f2; }
+
+  /* 列表單一項目樣式 */
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background-color: #2c2c35;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sidebar-item:hover {
+    background-color: #383842;
+    transform: translateX(-3px);
+  }
+
+  .sidebar-item.active {
+    background-color: #3d3d4a;
+    box-shadow: inset 0 0 0 2px #dfc5fe;
+  }
+
+  /* 列表內的數字小圖章 */
+  .sidebar-badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 13px;
+    margin-right: 12px;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .badge-tst { background-color: #e60012; }
+  .badge-ets { background-color: #714299; }
+
+  .sidebar-item-info {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .sidebar-item-name {
+    font-weight: bold;
+    font-size: 0.95em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-item-desc {
+    font-size: 0.8em;
+    color: #aaa;
+    margin-top: 2px;
+  }
+
+  /* --- 3. 地圖上的 3D 數字按鈕 (已按比例放大) --- */
+  .shop-hotspot {
+    position: absolute;
+    transform: translate(-50%, -50%); 
+    z-index: 10;
+  }
+
+  .shop-box {
+    width: 20px;  /* 從 15px 大幅放大至 32px */
+    height: 20px; 
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* 尖沙咀 TST 商店樣式：港鐵紅 */
+  .shop-box.tst-style {
+    background: linear-gradient(135deg, #ff4d4d, #e60012);
+    border: 1.5px solid #ff9999;
+    box-shadow: 0 3px 0px #99000b, 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 尖東 ETS 商店樣式：港鐵紫 */
+  .shop-box.ets-style {
+    background: linear-gradient(135deg, #a354a0, #714299);
+    border: 1.5px solid #e1b3e1;
+    box-shadow: 0 3px 0px #4a2373, 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .shop-box span {
+    font-size: 15px; /* 數字加大 */
+    color: white;
+    font-weight: bold;
+    font-family: "Arial Black", Gadget, sans-serif;
+    user-select: none;
+  }
+
+  /* 按鈕選中/浮起效果 */
+  .shop-box.active {
+    transform: translateY(-8px) scale(1.2);
+    border-color: #ffffff;
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.4), 0 4px 0px #222; 
+    z-index: 50;
+  }
+
+  /* --- 4. 浮動資訊視窗卡片 (已放大) --- */
+  .info-window {
+    position: absolute;
+    bottom: 160%; 
+    left: 50%;
+    transform: translateX(-50%);
+    width: 260px; /* 寬度從 200px 放大至 260px */
+    background-color: rgba(30, 30, 36, 0.96); /* 高級暗黑玻璃質感 */
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 16px; /* 內邊距加大 */
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+  }
+
+  .info-window::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -10px;
+    border-width: 10px;
+    border-style: solid;
+    border-color: rgba(30, 30, 36, 0.96) transparent transparent transparent;
+  }
+
+  .info-window.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(-5px);
+    pointer-events: auto;
+    z-index: 100;
+  }
+
+  .info-window h4 {
+    margin: 0 0 10px 0;
+    font-size: 1.2em; /* 標題字體放大 */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 6px;
+    color: #f1e5ff;
+  }
+
+  .info-window p {
+    margin: 6px 0;
+    font-size: 0.95em; /* 內文內容量放大 */
+    line-height: 1.4;
+    color: #e0e0e6;
+  }
+</style>
+</head>
+<body>
+
+<!-- 新增的登入頁面 -->
+<div id="login-container">
+  <div class="login-box">
+    <h2>系統登入</h2>
+    <p>請輸入密碼以瀏覽互動車站地圖</p>
+    <input type="password" id="pwd-input" placeholder="請輸入密碼" />
+    <button id="login-btn">登 入</button>
+    <div id="error-msg">密碼錯誤，請重新輸入。</div>
+  </div>
+</div>
+
+<!-- 將原本的地圖與側邊欄包在 main-content 中 -->
+<div id="main-content">
+  <div class="map-viewport" id="map-viewport">
+    <div class="map-container" id="map-container">
+      <img src="image_ed99ca.jpg" alt="Station Map" class="base-map" id="base-map">
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>車站商鋪指南</h2>
+    </div>
+    <div class="sidebar-content" id="sidebar-content">
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- 1. 商店資料庫 ---
+  const shopsData = [
+    // === 尖沙咀 TST 鋪位 ===
+    { id: "shop-TST01", name: "聖安娜餅屋", top: 33.54, left: 63.50, location: "大堂層, mid-con unpaid area", phone: "2711 6768", time: "07:00 - 00:00", desc: "食物及飲品", icon: "1", type: "TST" },
+    { id: "shop-TST02", name: "空置鋪位 (Vacant)", top: 33.24, left: 64.25, location: "大堂層, mid-con unpaid area", phone: " ", time: " ", desc: " ", icon: "2", type: "TST" },
+    { id: "shop-TST03", name: "健康工房", top: 32.67, left: 65.03, location: "大堂層, mid-con unpaid area", phone: "2377 1378, 店長:9278 5556", time: "08:00 - 21:00", desc: "食物及飲品", icon: "3", type: "TST" },
+    { id: "shop-TST04", name: "Mrs. Fields Cookies", top: 32.01, left: 66.22, location: "大堂層, mid-con unpaid area", phone: "5208 1187", time: "07:00 - 00:00", desc: "食物及飲品", icon: "4", type: "TST" },
+    { id: "shop-TST05", name: "7-Eleven", top: 31.23, left: 67.49, location: "大堂層, mid-con unpaid area", phone: "2957 8930 , 店長: 6571 1402", time: "07:00 - 00:00", desc: "便利零售產品", icon: "5", type: "TST" },
+    { id: "shop-TST06", name: "波斯美食", top: 28.71, left: 71.56, location: "大堂層, U/E paid area", phone: "9326 9302", time: "", desc: "食物及飲品", icon: "6", type: "TST" },
+    { id: "shop-TST07", name: "7-Eleven", top: 28.14, left: 72.93, location: "大堂層, U/E paid area", phone: "2957 8963, 店長: 62828400", time: "07:00 - 00:00", desc: "便利零售產品", icon: "7", type: "TST" },
+    { id: "shop-TST08", name: "A-1 Bakery", top: 27.55, left: 73.80, location: "大堂層, U/E paid area", phone: "2713 3695, 店長: 62332469", time: "07:00 - 21:30", desc: "食物及飲品", icon: "8", type: "TST" },
+    { id: "shop-TST09", name: "絕味 Juewei", top: 27.22, left: 74.53, location: "大堂層, U/E paid area", phone: "2650 1166, 店長:53440560", time: "11:00 - 23:00", desc: "食物及飲品", icon: "9", type: "TST" },
+    { id: "shop-TST10", name: "洪瑞珍", top: 33.63, left: 68.72, location: "大堂層, mid-con unpaid area", phone: "9883 1921, 店長:5578 3289", time: "11:00 - 23:00", desc: "食物及飲品", icon: "10", type: "TST" },
+    { id: "shop-TST11", name: "Momax", top: 34.11, left: 67.87, location: "大堂層, mid-con unpaid area", phone: " ", time: "", desc: "生活百貨", icon: "11", type: "TST" },
+    { id: "shop-TST12", name: "7-Eleven", top: 41.72, left: 52.03, location: "大堂層, D/E unpaid area", phone: "2736 7237, 店長:9718 1121", time: "07:00 - 23:00", desc: "生活百貨", icon: "12", type: "TST" },
+    { id: "shop-TST13", name: "藝匠修鞋配匙服務中心", top: 43.00, left: 52.34, location: "大堂層, D/E unpaid area", phone: "2317 5585, 店長:6871 5401", time: "10:00 - 20:00", desc: "乘客服務", icon: "13", type: "TST" },
+
+    // === 尖東 ETS 鋪位 ===
+    { id: "shop-ETS1", name: "華御結", top: 60.23, left: 44.10, location: "大堂層, West Con", phone: "2453 0955, 店長:9325 9618", time: "07:00 - 22:00", desc: "食物及飲品", icon: "1", type: "ETS" },
+    { id: "shop-ETS2", name: "唐包點", top: 60.29, left: 43.38, location: "大堂層, West Con", phone: "2320 8522, 店長:6290 3812", time: "07:00 - 22:00", desc: "食物及飲品", icon: "2", type: "ETS" },
+    { id: "shop-ETS3", name: "Circle K", top: 61.49, left: 43.30, location: "大堂層, West Con", phone: "2367 1486, 店長:9347 8727", time: "06:30 - 23:00", desc: "生活百貨", icon: "3", type: "ETS" },
+    { id: "shop-ETS4", name: "Just Foto", top: 61.67, left: 42.79, location: "大堂層, Exit J", phone: " ", time: "", desc: "乘客服務", icon: "4", type: "ETS" },
+    { id: "shop-ETS5", name: "Phiten", top: 61.13, left: 41.94, location: "大堂層, Exit J", phone: "2770 2910, 店長:6685 1948", time: "11:00 - 21:30", desc: "健康及美容", icon: "5", type: "ETS" },
+    { id: "shop-ETS6", name: "良茶隅", top: 61.25, left: 41.43, location: "大堂層, Exit J", phone: "3586 9222", time: "08:30 - 21:30", desc: "食物及飲品", icon: "6", type: "ETS" },
+    { id: "shop-ETS7", name: "K CASH", top: 62.57, left: 41.01, location: "大堂層, Exit J", phone: "2809 9064", time: "09:00 - 19:00", desc: "乘客服務", icon: "7", type: "ETS" },
+    { id: "shop-ETS8", name: "未命名商鋪 (Vacant)", top: 64.65, left: 42.08, location: "大堂層, Exit J", phone: " ", time: " ", desc: "乘客服務", icon: "8", type: "ETS" },
+    { id: "shop-ETS9", name: "POCA Spot", top: 63.72, left: 42.72, location: "大堂層, Exit J", phone: " ", time: " ", desc: "乘客服務", icon: "9", type: "ETS" },
+    { id: "shop-ETS10", name: "K Station powered by K Fest", top: 63.71, left: 43.42, location: "大堂層, Exit J", phone: " ", time: " ", desc: "時裝及飾物", icon: "10", type: "ETS" },
+    { id: "shop-ETS11", name: "らしんばん lashinbang", top: 63.40, left: 43.90, location: "大堂層, Exit J", phone: "店長:6985 3282", time: " ", desc: "生活百貨", icon: "11", type: "ETS" },
+    { id: "shop-ETS12", name: "FanTown 聚星商店 (12)", top: 62.44, left: 43.90, location: "大堂層, Exit J", phone: " ", time: " ", desc: "時裝及飾物", icon: "12", type: "ETS" },
+    { id: "shop-ETS13-1", name: "FanTown 聚星商店 (13)", top: 62.59, left: 44.44, location: "大堂層, Exit J", phone: " ", time: " ", desc: "時裝及飾物", icon: "13", type: "ETS" },
+    { id: "shop-ETS14-1", name: "FanTown 聚星商店 (14)", top: 62.95, left: 44.88, location: "大堂層, Exit J", phone: " ", time: " ", desc: "時裝及飾物", icon: "14", type: "ETS" },
+    { id: "shop-ETS15", name: "鯉魚門紹香園", top: 64.28, left: 45.16, location: "大堂層, Exit J", phone: "2717 3421", time: "11:00 - 20:30", desc: "食物及飲品", icon: "15", type: "ETS" },
+    { id: "shop-ETS16", name: "康維他", top: 64.60, left: 45.65, location: "大堂層, Exit K", phone: "2366 2102", time: "11:30 - 20:30", desc: "健康及美容", icon: "16", type: "ETS" },
+    { id: "shop-ETS17", name: "老行家", top: 64.85, left: 46.11, location: "大堂層, Exit K", phone: "2796 3995", time: "11:00 - 22:00", desc: "健康及美容", icon: "17", type: "ETS" },
+    { id: "shop-ETS18", name: "空置鋪位 (Vacant)", top: 65.03, left: 46.57, location: "大堂層, Exit K", phone: " ", time: " ", desc: " ", icon: "18", type: "ETS" },
+    { id: "shop-ETS19", name: "TONYMOLY", top: 62.01, left: 49.70, location: "大堂層, Exit K", phone: "3689 7388, 店長:5539 4010", time: "10:00 - 21:00", desc: "健康及美容", icon: "19", type: "ETS" },
+    { id: "shop-ETS20", name: "Friendship Market", top: 63.06, left: 50.24, location: "大堂層, Exit K", phone: " ", time: " ", desc: "食品零售", icon: "20", type: "ETS" },
+    { id: "shop-ETS21", name: "誠品知味", top: 64.17, left: 50.98, location: "大堂層, Exit K", phone: "3419 1112, 店長:6228 8985", time: "10:00 - 22:00", desc: "生活百貨", icon: "21", type: "ETS" },
+    { id: "shop-ETS22", name: "A-1 Bakery", top: 65.47, left: 51.60, location: "大堂層, Exit K", phone: "2695 3860, 店長:5345 3944", time: "10:00 - 22:00", desc: "食物及飲品", icon: "22", type: "ETS" },
+    { id: "shop-ETS23", name: "Chateraise", top: 66.36, left: 52.16, location: "大堂層, Exit K", phone: "2383 3013, 店長:6660 4959", time: "09:30 - 21:30", desc: "食物及飲品", icon: "23", type: "ETS" },
+    { id: "shop-ETS24", name: "空置鋪位 (Vacant)", top: 74.15, left: 69.28, location: "大堂層, East Con", phone: " ", time: " ", desc: " ", icon: "24", type: "ETS" },
+    { id: "shop-ETS25", name: "Circle K", top: 73.66, left: 70.24, location: "大堂層, East Con", phone: "2367 4443", time: "06:30 - 00:00", desc: "便利零售產品", icon: "25", type: "ETS" },
+    { id: "shop-ETS26", name: "Mrs. Fields Cookies", top: 73.36, left: 71.26, location: "大堂層, East Con", phone: "5208 1513, 店長:6158 8697", time: "09:30 - 22:00", desc: "食物及飲品", icon: "26", type: "ETS" },
+    { id: "shop-ETS27", name: "山崎麵飽", top: 72.70, left: 72.19, location: "大堂層, East Con", phone: "2739 1068, 店長:6228 3942", time: "07:00 - 20:30", desc: "食物及飲品", icon: "27", type: "ETS" },
+    { id: "shop-ETS28", name: "鴻福堂", top: 72.35, left: 73.22, location: "大堂層, East Con", phone: "2311 4377, 店長:9205 1081", time: "08:00 - 21:00", desc: "食物及飲品", icon: "28", type: "ETS" },
+    { id: "shop-ETS29", name: "QB House", top: 71.91, left: 74.19, location: "大堂層, East Con", phone: " ", time: " ", desc: "乘客服務", icon: "29", type: "ETS" },
+    { id: "shop-ETS30", name: "空置鋪位 (Vacant)", top: 71.51, left: 75.10, location: "大堂層, East Con", phone: " ", time: " ", desc: " ", icon: "30", type: "ETS" },
+    { id: "shop-ETS31", name: "美心西餅", top: 70.98, left: 75.97, location: "大堂層, East Con", phone: "2367 3396, 店長:9319 3385", time: "08:00 - 20:00", desc: "食物及飲品", icon: "31", type: "ETS" },
+    { id: "shop-ETS32", name: "空置鋪位 (Vacant)", top: 24.15, left: 45.23, location: "Ground Level", phone: " ", time: " ", desc: " ", icon: "32", type: "ETS" },
+    { id: "shop-ETS33", name: "空置鋪位 (Vacant)", top: 26.05, left: 45.38, location: "Ground Level", phone: " ", time: " ", desc: " ", icon: "33", type: "ETS" },
+    { id: "shop-ETS34", name: "空置鋪位 (Vacant)", top: 27.77, left: 46.01, location: "Ground Level", phone: " ", time: " ", desc: " ", icon: "34", type: "ETS" },
+    { id: "shop-ETS35", name: "空置鋪位 (Vacant)", top: 27.82, left: 47.19, location: "Ground Level", phone: " ", time: " ", desc: " ", icon: "35", type: "ETS" },
+    { id: "shop-ETS36", name: "空置鋪位 (Vacant)", top: 28.66, left: 47.66, location: "Ground Level", phone: " ", time: " ", desc: " ", icon: "36", type: "ETS" }
+  ];
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // --- 登入頁面邏輯 ---
+    const loginBtn = document.getElementById('login-btn');
+    const pwdInput = document.getElementById('pwd-input');
+    const loginContainer = document.getElementById('login-container');
+    const mainContent = document.getElementById('main-content');
+    const errorMsg = document.getElementById('error-msg');
+
+    loginBtn.addEventListener('click', () => {
+      if (pwdInput.value === '1524222') {
+        loginContainer.style.display = 'none';
+        mainContent.style.display = 'flex';
+        
+        // 登入成功後，容器才有實際尺寸，此時再初始化地圖視角
+        if (baseMap.complete) {
+          initMapView();
+        } else {
+          baseMap.onload = initMapView;
+        }
+      } else {
+        errorMsg.style.display = 'block';
+      }
+    });
+
+    // 支援按 Enter 鍵登入
+    pwdInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loginBtn.click();
+      }
+    });
+
+    const mapContainer = document.getElementById('map-container');
+    const mapViewport = document.getElementById('map-viewport');
+    const sidebarContent = document.getElementById('sidebar-content');
+    const baseMap = document.getElementById('base-map');
+
+    let activeShopId = null;
+    let elementsMap = {}; // 用於快速查閱 DOM 節點的對照表
+
+    // --- 2. 建立右側列表的分類容器 ---
+    const tstSection = document.createElement('div');
+    tstSection.innerHTML = `<div class="sidebar-section-title title-tst">尖沙咀站 (TST)</div>`;
+    const etsSection = document.createElement('div');
+    etsSection.innerHTML = `<div class="sidebar-section-title title-ets">尖東站 (ETS)</div>`;
+    
+    sidebarContent.appendChild(tstSection);
+    sidebarContent.appendChild(etsSection);
+
+    // --- 3. 動態渲染地圖按鈕 & 側邊欄列表 ---
+    shopsData.forEach(shop => {
+      const isTST = shop.type === "TST";
+      
+      // A. 生成地圖按鈕圖層
+      const hotspot = document.createElement('div');
+      hotspot.className = 'shop-hotspot';
+      hotspot.style.top = `${shop.top}%`;
+      hotspot.style.left = `${shop.left}%`;
+
+      hotspot.innerHTML = `
+        <div class="shop-box ${isTST ? 'tst-style' : 'ets-style'}" id="box-${shop.id}">
+          <span>${shop.icon}</span> 
+        </div>
+        <div class="info-window" id="window-${shop.id}">
+          <h4>${shop.name || '未命名商鋪'}</h4>
+          <p>📍 ${shop.location || '無位置資料'}</p>
+          ${shop.phone.trim() ? `<p>📞 ${shop.phone}</p>` : ''}
+          ${shop.time.trim() ? `<p>🕒 ${shop.time}</p>` : ''}
+          ${shop.desc.trim() ? `<p>🛍️ ${shop.desc}</p>` : ''}
+        </div>
+      `;
+      mapContainer.appendChild(hotspot);
+
+      // B. 生成側邊欄列表項目
+      const listItem = document.createElement('div');
+      listItem.className = 'sidebar-item';
+      listItem.id = `item-${shop.id}`;
+      listItem.innerHTML = `
+        <div class="sidebar-badge ${isTST ? 'badge-tst' : 'badge-ets'}">${shop.icon}</div>
+        <div class="sidebar-item-info">
+          <div class="sidebar-item-name">${shop.name || '空置鋪位 (Vacant)'}</div>
+          <div class="sidebar-item-desc">${shop.location.split(',')[0]} · ${shop.desc || '零售'}</div>
+        </div>
+      `;
+      
+      if (isTST) {
+        tstSection.appendChild(listItem);
+      } else {
+        etsSection.appendChild(listItem);
+      }
+
+      // 儲存 DOM 參考到對照表
+      const box = hotspot.querySelector('.shop-box');
+      const win = hotspot.querySelector('.info-window');
+      elementsMap[shop.id] = { box, win, item: listItem, data: shop };
+
+      // --- 4. 點擊邏輯 (地圖與列表共用一條核心邏輯) ---
+      const triggerSelection = () => {
+        handleShopSelect(shop.id);
+      };
+
+      box.addEventListener('mousedown', (e) => e.stopPropagation()); // 防止拖曳衝突
+      box.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerSelection();
+      });
+      listItem.addEventListener('click', triggerSelection);
+    });
+
+    // 核心處理：選取某間商店時的動作（開關卡片、地圖平移聚焦、列表滾動切換）
+    function handleShopSelect(shopId) {
+      // 如果點擊的是同一個已打開的商店，則關閉它
+      if (activeShopId === shopId) {
+        clearActive();
+        return;
+      }
+
+      // 關閉之前的商店
+      clearActive();
+
+      // 啟用現在選中的商店
+      const current = elementsMap[shopId];
+      if (!current) return;
+
+      current.box.classList.add('active');
+      current.win.classList.add('show');
+      current.item.classList.add('active');
+      activeShopId = shopId;
+
+      // 側邊欄同步自動滾動到被點選的項目位置
+      current.item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      // 【全新自動聚焦聚焦算法】讓地圖平移並自動放大對齊畫面中央
+      const imgWidth = baseMap.naturalWidth || baseMap.offsetWidth;
+      const imgHeight = baseMap.naturalHeight || baseMap.offsetHeight;
+      const shopX = (current.data.left / 100) * imgWidth;
+      const shopY = (current.data.top / 100) * imgHeight;
+
+      const vpWidth = mapViewport.offsetWidth;
+      const vpHeight = mapViewport.offsetHeight;
+
+      // 點選列表時自動放大到理想的 1.6 倍，並將商店拉到畫面中央
+      scale = 1.6;
+      pointX = vpWidth / 2 - shopX * scale;
+      pointY = vpHeight / 2 - shopY * scale;
+
+      updateTransform();
+    }
+
+    function clearActive() {
+      if (activeShopId && elementsMap[activeShopId]) {
+        const prev = elementsMap[activeShopId];
+        prev.box.classList.remove('active');
+        prev.win.classList.remove('show');
+        prev.item.classList.remove('active');
+        activeShopId = null;
+      }
+    }
+
+    // 點擊地圖空白處關閉視窗
+    mapViewport.addEventListener('click', (e) => {
+      if (e.target.id === 'base-map' || e.target.id === 'map-viewport') {
+        clearActive();
+      }
+    });
+
+    // --- 5. 拖曳與滾輪縮放邏輯 (含新增的初始自動縮放置中) ---
+    let scale = 1;      
+    let pointX = 0;     
+    let pointY = 0;     
+    let start = { x: 0, y: 0 };
+    let isDragging = false;
+
+    function updateTransform() {
+      mapContainer.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+    }
+
+    // 初始化視角，讓圖片完整顯示在畫面中並置中
+    function initMapView() {
+      const vpWidth = mapViewport.offsetWidth;
+      const vpHeight = mapViewport.offsetHeight;
+      const imgWidth = baseMap.naturalWidth || baseMap.offsetWidth;
+      const imgHeight = baseMap.naturalHeight || baseMap.offsetHeight;
+
+      if (imgWidth > 0 && imgHeight > 0) {
+        // 取寬高比例中較小的值，並乘上 0.95 留一點邊界留白
+        scale = Math.min(vpWidth / imgWidth, vpHeight / imgHeight) * 0.95;
+        // 計算置中需要的位移量
+        pointX = (vpWidth - imgWidth * scale) / 2;
+        pointY = (vpHeight - imgHeight * scale) / 2;
+        updateTransform();
+      }
+    }
+
+    mapViewport.addEventListener('mousedown', (e) => {
+      // 只有當點擊地圖背景或視窗時才觸發拖曳
+      if (e.target.id === 'base-map' || e.target.id === 'map-viewport') {
+        e.preventDefault();
+        start = { x: e.clientX - pointX, y: e.clientY - pointY };
+        isDragging = true;
+      }
+    });
+
+    document.addEventListener('mouseup', () => isDragging = false);
+
+    mapViewport.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      pointX = e.clientX - start.x;
+      pointY = e.clientY - start.y;
+      updateTransform();
+    });
+
+    mapViewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const xs = (e.clientX - pointX) / scale;
+      const ys = (e.clientY - pointY) / scale;
+      const delta = e.deltaY || e.detail || e.wheelDelta;
+      
+      if (delta > 0) {
+        scale *= 0.9;
+      } else {
+        scale *= 1.1;
+      }
+      scale = Math.max(0.1, Math.min(scale, 5)); // 稍微放寬最小縮放值到 0.1 以防超大圖片
+      pointX = e.clientX - xs * scale;
+      pointY = e.clientY - ys * scale;
+      updateTransform();
+    });
+
+    // --- 6. 雙擊精準定位工具 (完整保留) ---
+    mapContainer.addEventListener('dblclick', function(e) {
+      if (e.target.id === 'base-map') {
+        const rect = e.target.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        alert(`新商店座標 -> top: ${y.toFixed(2)}%, left: ${x.toFixed(2)}%`);
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
